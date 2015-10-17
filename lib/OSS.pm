@@ -41,6 +41,7 @@ sub new {
 
 }
 
+
 sub ListBucket {
     my $self = shift;
     my $r = $self->_send_request('GET', '', {});
@@ -74,6 +75,70 @@ sub ListBucket {
 };
 
 
+sub add_bucket {
+    my ($self, $conf) = @_;
+    my $bucket = $conf->{bucket};
+    croak 'must specify bucket' unless $bucket;
+    
+    #验证bucket访问权限
+    if ($conf->{acl_short}) {
+        $self->_validate_acl_short($conf->{acl_short});
+    }
+    
+    my $header_ref =
+    ($conf->{acl_short})
+    ? {'x-oss-acl' => $conf->{acl_short}}
+    : {};
+    
+    #指定bucket所在的数据中文 默认是oss-cn-hangzhou
+    
+    my $data = '';
+    if (defined $conf->{location_constraint}) {
+        $data =
+        "<CreateBucketConfiguration><LocationConstraint>"
+        . $conf->{location_constraint}
+        . "</LocationConstraint></CreateBucketConfiguration>";
+    }
+    
+    return 0
+    unless $self->_send_request_expect_nothing('PUT', "$bucket/",
+    $header_ref, $data);
+    return $self->bucket($bucket);
+}
+
+sub delete_bucket {
+    my ($self, $conf) = @_;
+    my $bucket;
+    if (eval { $conf->isa("OSS::S3::Bucket"); }) {
+        $bucket = $conf->bucket;
+    }
+    else {
+        $bucket = $conf->{bucket};
+    }
+    croak 'must specify bucket' unless $bucket;
+    return $self->_send_request_expect_nothing('DELETE', $bucket . "/", {});
+}
+
+
+sub bucket {
+    my ($self, $bucketname) = @_;
+    return OSS::Bucket->new({bucket => $bucketname, account => $self});
+}
+
+sub _send_request_expect_nothing {
+    my $self    = shift;
+    my $request = $self->_make_request(@_);
+    
+    my $response = $self->_do_http($request);
+    my $content  = $response->content;
+    
+    return 1 if $response->code =~ /^2\d\d$/;
+    
+    # anything else is a failure, and we save the parsed result
+    $self->_remember_errors($response->content);
+    return 0;
+}
+
 sub _send_request {
     my $self = shift;
     my $request;
@@ -83,6 +148,26 @@ sub _send_request {
     return $content unless $response->content_type eq 'application/xml';
     return unless $content;
     return $self->_xpc_of_content($content);
+}
+
+sub _remember_errors {
+    my ($self, $src) = @_;
+    
+    unless (ref $src || $src =~ m/^[[:space:]]*</) {    # if not xml
+        (my $code = $src) =~ s/^[[:space:]]*\([0-9]*\).*$/$1/;
+        $self->err($code);
+        $self->errstr($src);
+        return 1;
+    }
+    
+    my $r = ref $src ? $src : $self->_xpc_of_content($src);
+    
+    if ($r->{Error}) {
+        $self->err($r->{Error}{Code});
+        $self->errstr($r->{Error}{Message});
+        return 1;
+    }
+    return 0;
 }
 
 sub _make_request {
@@ -172,6 +257,16 @@ sub _canonical_string  {
     
     return $buf;
     
+}
+
+sub _validate_acl_short {
+    my ($self, $policy_name) = @_;
+    
+    if (!grep({$policy_name eq $_}
+    qw(private public-read public-read-write )))
+    {
+        croak "$policy_name is not a supported canned access policy";
+    }
 }
 
 sub _trim {
