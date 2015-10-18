@@ -11,6 +11,8 @@ use base qw(Class::Accessor::Fast);
 use HTTP::Headers;
 use LWP::UserAgent::Determined;
 use XML::Simple;
+use URI::Escape qw(uri_escape_utf8);
+
 my $ALI_HEADER_PREFIX ='x-oss';
 __PACKAGE__->mk_accessors(
 qw(ali_access_key_id ali_secret_access_key host secure timeout ua err errstr)
@@ -74,7 +76,72 @@ sub ListBucket {
     };
 };
 
+sub list_bucket {
+    my ($self, $conf) = @_;
+    my $bucket = delete $conf->{bucket};
+    croak 'must specify bucket' unless $bucket;
+    $conf ||= {};
 
+    my $path = $bucket . "/";
+
+    if (%$conf) {
+        $path .= "?"
+          .join('&',
+                map {$_ . "=" . $self->_urlencode($conf->{$_}) } keys %$conf );
+    }
+    my $r = $self->_send_request('GET', $path, {});
+
+    return undef unless $r && !$self->_remember_errors($r);
+
+=c   返回结果说明
+    bucket Bucket名字
+    prefix 本次查询结果的开始前缀
+    marker 标明这次Get Bucket（List Object）的起点。
+    next_marker 如果因为max-keys的设定无法一次完成listing，返回结果会附加一个<NextMarker>，提示继续listing可以以此为marker。NextMarker中的值仍在list结果之中。
+    is_truncated 指明是否所有的结果都已经返回； “true”表示本次没有返回全部结果；“false”表示本次已经返回了全部结果。
+=cut
+    my $return = {
+                  bucket       => $r->{Name},
+                  prefix       => $r->{Prefix},
+                  marker       => $r->{Marker},
+                  next_marker  => $r->{NextMarker},
+                  max_keys     => $r->{MaxKeys},
+                  is_truncated => (
+                                   scalar $r->{IsTruncated} eq 'true'
+                                   ? 1
+                                   : 0
+                                  ),
+                 };
+    my @keys;
+    for my $node (@{$r->{Contents}}) {
+      my $etag = $node->{ETag};
+      $etag =~ s{(^"|"$)}{}g if defined $etag;
+      push @keys,{
+                  key               => $node->{Key},
+                  last_modified     => $node->{LastModified},
+                  etag              => $etag,
+                  size              => $node->{Size},
+                  storage_class     => $node->{StorageClass},
+                  owner_id          => $node->{Owner}{ID},
+                  owner_displayname => $node->{Owner}{DisplayName},
+                 };
+    }
+    $return->{keys} = \@keys;
+    
+=c    if ($conf->{delimiter}) {
+      my @common_prefixes;
+      my $strip_delim = qr/$conf->{delimiter}$/;
+      foreach my $node ($r->{CommonPrefixes}) {
+        my $prefix = $r->{Prefix};
+        $prefix =~ s/$strip_delim//;
+        push @common_prefixes, $prefix;
+        
+      }
+      $return->{common_prefixes} = \@common_prefixes;
+    }
+=cut    
+    return $return;
+}
 sub add_bucket {
     my ($self, $conf) = @_;
     my $bucket = $conf->{bucket};
@@ -289,4 +356,8 @@ sub _merge_meta {
     return $http_header;
 }
 
+sub _urlencode {
+      my ($self, $unencoded) = @_;
+      return uri_escape_utf8($unencoded, '^A-Za-z0-9_-');
+}
 1;
