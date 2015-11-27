@@ -44,7 +44,7 @@ sub new {
 }
 
 
-sub ListBucket {
+sub buckets {
     my $self = shift;
     my $r = $self->_send_request('GET', '', {});
     
