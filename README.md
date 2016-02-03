@@ -1,7 +1,38 @@
-# OSS
-目前该模块只支持listbucket的方法下载模块perl MakeFile.pm && make && make install 初始化安装
-use OSS;
-my $a = OSS->new({ali_access_key_id=>'xx',ali_secret_access_key=>'xxx'});
-my $r = $a->ListBucket;
-$r返回 oss 返回的结果;
+=encoding utf-8
 
+=head1 NAME
+
+OSS - 阿里云对象存储oss管理接口
+
+=head1 SYNOPSIS
+
+    #!/usr/bin/evn perl
+    use warnings;
+    use strict;
+
+    use OSS;
+
+    my $ali_access_key_id       = '';
+    my $ali_secret_access_key   = '';
+
+    my $oss = OSS->new(
+        {
+            $ali_access_key_id     => $ali_access_key_id,
+            $ali_secret_access_key => $ali_secret_access_key,
+
+        }
+    );
+    my $buckets = $oss->buckets;
+
+
+    my $bucket_name = 'mytest';
+    #创建bucket
+    my $bucket = $oss->add_bucket({bucket =>$bucket_name}) or die $oss->err . ": " . $oss->errstr;
+
+=head1 DESCRIPTION
+
+OSS 提供操作oss存储接口
+
+=head1 AUTHOR
+
+Crisewng <crisewng@gmail.com>
