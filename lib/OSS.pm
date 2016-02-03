@@ -93,13 +93,7 @@ sub list_bucket {
 
     return undef unless $r && !$self->_remember_errors($r);
 
-=c   返回结果说明
-    bucket Bucket名字
-    prefix 本次查询结果的开始前缀
-    marker 标明这次Get Bucket（List Object）的起点。
-    next_marker 如果因为max-keys的设定无法一次完成listing，返回结果会附加一个<NextMarker>，提示继续listing可以以此为marker。NextMarker中的值仍在list结果之中。
-    is_truncated 指明是否所有的结果都已经返回； “true”表示本次没有返回全部结果；“false”表示本次已经返回了全部结果。
-=cut
+
     my $return = {
                   bucket       => $r->{Name},
                   prefix       => $r->{Prefix},
@@ -128,7 +122,7 @@ sub list_bucket {
     }
     $return->{keys} = \@keys;
     
-=c    if ($conf->{delimiter}) {
+    if ($conf->{delimiter}) {
       my @common_prefixes;
       my $strip_delim = qr/$conf->{delimiter}$/;
       foreach my $node ($r->{CommonPrefixes}) {
@@ -139,9 +133,10 @@ sub list_bucket {
       }
       $return->{common_prefixes} = \@common_prefixes;
     }
-=cut    
+
     return $return;
 }
+
 sub add_bucket {
     my ($self, $conf) = @_;
     my $bucket = $conf->{bucket};
@@ -176,7 +171,7 @@ sub add_bucket {
 sub delete_bucket {
     my ($self, $conf) = @_;
     my $bucket;
-    if (eval { $conf->isa("OSS::S3::Bucket"); }) {
+    if (eval { $conf->isa("OSS::Bucket"); }) {
         $bucket = $conf->bucket;
     }
     else {
@@ -216,6 +211,7 @@ sub _send_request {
     return unless $content;
     return $self->_xpc_of_content($content);
 }
+# returns 1 if errors were found
 
 sub _remember_errors {
     my ($self, $src) = @_;
@@ -361,3 +357,43 @@ sub _urlencode {
       return uri_escape_utf8($unencoded, '^A-Za-z0-9_-');
 }
 1;
+
+__END__
+
+=head1 NAME
+
+OSS - 阿里云对象存储oss管理接口
+
+=head1 SYNOPSIS
+
+    #!/usr/bin/evn perl
+    use warnings;
+    use strict;
+
+    use OSS;
+
+    my $ali_access_key_id       = '';
+    my $ali_secret_access_key   = '';
+
+    my $oss = OSS->new(
+        {
+            $ali_access_key_id     => $ali_access_key_id,
+            $ali_secret_access_key => $ali_secret_access_key,
+
+        }
+    );
+    my $buckets = $oss->buckets;
+
+
+    my $bucket_name = 'mytest';
+    #创建bucket
+    my $bucket = $oss->add_bucket({bucket =>$bucket_name}) or die $oss->err . ": " . $oss->errstr;
+
+=head1 DESCRIPTION
+
+OSS 提供操作oss存储接口
+
+=head1 AUTHOR
+
+Crisewng <crisewng@gmail.com>
+
